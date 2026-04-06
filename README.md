@@ -1,5 +1,7 @@
 # ShiftSync — Multi-Location Staff Scheduling Platform (Assessment)
 
+# There are some bugs, because of time I havent done a full review
+
 ShiftSync is a staff scheduling platform built for Coastal Eats, a restaurant
 group running four locations across two US timezones. It handles the full
 cycle of shift management, creating and publishing schedules, assigning staff
@@ -142,3 +144,5 @@ threshold that triggers a flag.
   is called instead of on a schedule.
 - JWT location IDs require a re-login after new location assignments.
 - The schedule grid is designed for screens 900px and wider.
+- Better loading states for all buttons and error handling
+- Better UI

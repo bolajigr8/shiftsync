@@ -107,8 +107,8 @@ function getMondayISO() {
 // ── Main Component ───────────────────────────────────────────────────────────
 
 export default function SchedulePage() {
-  const { locationId } = useParams<{ locationId: string }>()
-  const { data: session } = useSession()
+  const { locationid } = useParams<{ locationid: string }>()
+  const locationId = locationid // alias so the rest of the file stays the same  const { data: session } = useSession()
 
   const [weekStart, setWeekStart] = useState(() => getWeekStart())
   const [shifts, setShifts] = useState<Shift[]>([])
@@ -151,18 +151,26 @@ export default function SchedulePage() {
   const [publishing, setPublishing] = useState(false)
 
   // ── Data loading ──────────────────────────────────────────────────────────
-
   const loadShifts = useCallback(async () => {
-    if (!locationId) return
+    if (!locationId) {
+      setLoading(false) // ← guard: don't hang on missing param
+      return
+    }
     setLoading(true)
-    const params = new URLSearchParams({
-      locationId,
-      weekStart: weekStart.toISOString(),
-    })
-    const res = await fetch(`/api/shifts?${params}`)
-    const data = await res.json()
-    if (data.success) setShifts(data.data)
-    setLoading(false)
+    try {
+      const params = new URLSearchParams({
+        locationId,
+        weekStart: weekStart.toISOString(),
+      })
+      const res = await fetch(`/api/shifts?${params}`)
+      const data = await res.json()
+      if (data.success) setShifts(data.data)
+      else console.error('Shifts API error:', data.error)
+    } catch (err) {
+      console.error('Failed to load shifts:', err)
+    } finally {
+      setLoading(false) // ← always clears loading, even on throw
+    }
   }, [locationId, weekStart])
 
   const loadOvertime = useCallback(async () => {
