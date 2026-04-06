@@ -8,6 +8,7 @@ import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { Sidebar, type NavItem } from '@/components/sidebar'
 import { ToastProvider } from '@/hooks/toast'
+import '../shiftsync.css'
 
 const NAV_ITEMS: NavItem[] = [
   {

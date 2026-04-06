@@ -3,6 +3,7 @@ import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { Sidebar, type NavItem } from '@/components/sidebar'
 import { ToastProvider } from '@/hooks/toast'
+import '../shiftsync.css'
 
 export default async function ManagerLayout({
   children,
