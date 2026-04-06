@@ -1,172 +1,144 @@
-# ShiftSync
+# ShiftSync — Multi-Location Staff Scheduling Platform (Assessment)
 
-A multi-location staff scheduling application for the **Coastal Eats** restaurant group. Built with Next.js 16, TypeScript, Prisma, Supabase Realtime, and NextAuth — covering the full lifecycle of shift management, swap requests, availability, constraint enforcement, overtime tracking, and fairness analytics.
+ShiftSync is a staff scheduling platform built for Coastal Eats, a restaurant
+group running four locations across two US timezones. It handles the full
+cycle of shift management, creating and publishing schedules, assigning staff
+with automatic constraint checks, managing swap requests through a multi-stage
+approval flow, tracking overtime costs, and surfacing fairness analytics across
+the team.
+
+The constraint engine is the core of the system. Before any assignment goes
+through, it checks eight rules in parallel: skill match, location certification,
+availability (with daylight-saving-safe timezone handling), double-booking,
+rest periods between shifts, daily hours, weekly hours, and consecutive days.
+Failures come back as a structured list with alternative suggestions. Only the
+seventh-consecutive-day rule is overridable, and only with a documented reason
+that gets written permanently to the audit log.
 
 ---
 
-## Live Demo
+## Tech Stack
 
-**`https://shiftsync-coastal.vercel.app`** _(replace with your deployed URL)_
-
----
-
-## Technology Stack
-
-| Layer      | Choice                    | Notes                                        |
-| ---------- | ------------------------- | -------------------------------------------- |
-| Framework  | Next.js 16 (App Router)   | `src/` directory, server + client components |
-| Language   | TypeScript (strict mode)  | All files typed end-to-end                   |
-| Styling    | Custom CSS design system  | `src/app/shiftsync.css`                      |
-| Database   | PostgreSQL (Supabase)     | Free tier                                    |
-| ORM        | Prisma v6                 | `@prisma/adapter-pg` driver adapter          |
-| Auth       | NextAuth v4               | CredentialsProvider + JWT, 8h sessions       |
-| Realtime   | Supabase Realtime         | Broadcast for schedule + notifications       |
-| Validation | Zod                       | All API routes and forms                     |
-| Date/time  | date-fns + date-fns-tz v3 | All datetimes stored UTC                     |
-| Charts     | recharts                  | Analytics fairness page                      |
+| Layer           | Choice                                           |
+| --------------- | ------------------------------------------------ |
+| Framework       | Next.js 16 (App Router), TypeScript strict mode  |
+| Styling         | TailwindCSS + shadcn/ui                          |
+| Database        | PostgreSQL via Supabase                          |
+| ORM             | Prisma v6 with @prisma/adapter-pg                |
+| Auth            | NextAuth v4, CredentialsProvider, JWT sessions   |
+| Realtime        | Supabase Realtime broadcast channels             |
+| Date handling   | date-fns + date-fns-tz, all datetimes stored UTC |
+| Charts          | recharts                                         |
+| Validation      | Zod                                              |
+| Package manager | pnpm                                             |
 
 ---
 
 ## Test Accounts
 
-Password for all accounts: **`CoastalEats2024`**
+All accounts use the password **CoastalEats2024**
 
-| Role    | Email                     | Scenario                                          |
-| ------- | ------------------------- | ------------------------------------------------- |
-| ADMIN   | `admin@coastal.com`       | Full system access                                |
-| MANAGER | `manager.nyc@coastal.com` | NYC + Miami manager                               |
-| MANAGER | `manager.la@coastal.com`  | LA + Seattle manager                              |
-| STAFF   | `john@coastal.com`        | Timezone tangle — Eastern availability, LA shifts |
-| STAFF   | `sarah@coastal.com`       | Overtime warning — 34h this week                  |
-| STAFF   | `mike@coastal.com`        | Active PENDING swap request targeting John        |
-| STAFF   | `maria@coastal.com`       | Fairness flag — 0 premium shifts                  |
-| STAFF   | `carlos@coastal.com`      | Bartender, NYC + Miami                            |
-| STAFF   | `priya@coastal.com`       | Server, LA + Seattle                              |
-| STAFF   | `james@coastal.com`       | Host, NYC + Miami                                 |
-| STAFF   | `aisha@coastal.com`       | Line Cook, LA + Seattle                           |
+| Role    | Email                   | What it demonstrates                                 |
+| ------- | ----------------------- | ---------------------------------------------------- |
+| Admin   | admin@coastal.com       | Full system access, audit log, email log             |
+| Manager | manager.nyc@coastal.com | NYC + Miami, full schedule builder                   |
+| Manager | manager.la@coastal.com  | LA + Seattle, timezone scenario                      |
+| Staff   | john@coastal.com        | Eastern availability against Pacific shifts          |
+| Staff   | sarah@coastal.com       | 34h this week — next shift triggers overtime warning |
+| Staff   | mike@coastal.com        | Active pending swap request                          |
+| Staff   | maria@coastal.com       | Zero premium shifts — fairness score below 0.7       |
+| Staff   | carlos@coastal.com      | Bartender, NYC + Miami                               |
+| Staff   | priya@coastal.com       | Server, LA + Seattle                                 |
+| Staff   | james@coastal.com       | Host, NYC + Miami                                    |
+| Staff   | aisha@coastal.com       | Line Cook, LA + Seattle                              |
 
 ---
 
-## Local Development
+## Running Locally
 
 ```bash
-git clone https://github.com/your-org/shiftsync.git
+git clone https://github.com/your-username/shiftsync.git
 cd shiftsync
-npm install
-cp .env.example .env.local   # fill in all values
-npx prisma db push
-npx prisma db seed
-npm run dev
-# open http://localhost:3000
+pnpm install
+cp .env.example .env.local
+# Fill in all values — see Environment Variables below
+pnpm dlx prisma db push
+pnpm dlx prisma db seed
+pnpm dev
 ```
+
+Open `http://localhost:3000`. The login page is the entry point for all roles.
 
 ### Environment Variables
 
 ```env
-DATABASE_URL=
-DIRECT_URL=
-SUPABASE_URL=
-SUPABASE_SERVICE_ROLE_KEY=
+DATABASE_URL=          # Supabase pooled connection (Transaction mode)
+DIRECT_URL=            # Supabase direct connection (for migrations)
+SUPABASE_URL=          # Project URL from Supabase API settings
 NEXT_PUBLIC_SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=   # Keep secret — server only
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
-NEXTAUTH_SECRET=
-NEXTAUTH_URL=
-CRON_SECRET=
+NEXTAUTH_SECRET=       # Generate with: openssl rand -base64 32
+NEXTAUTH_URL=          # http://localhost:3000 locally
+CRON_SECRET=           # Generate with: openssl rand -base64 32
 ```
 
 ---
 
 ## Design Decisions
 
-**1. Availability timezone storage.** Availability times are stored as plain `HH:mm` strings in the staff member's own local timezone, not UTC. A "9 AM Monday" availability means 9 AM in their time regardless of DST. The constraint engine converts the shift start into the staff member's timezone before comparing — demonstrated by John Torres certified at both NYC (ET) and LA (PT).
+**Availability stored in local HH:mm, not UTC.**
+Recurring availability like "Monday 9 AM – 5 PM" is stored as plain time
+strings in the staff member's own timezone rather than converting to UTC.
+Converting would cause the times to drift when daylight saving changes —
+a 9 AM Eastern slot would silently shift to 8 AM UTC in summer and 9 AM
+in winter. The constraint engine converts the shift's UTC start time into
+the staff member's personal timezone before comparing against their
+availability window.
 
-**2. Consecutive-day override scope.** Only the 7th-consecutive-day check is overridable. All other hard failures (skill, certification, double-booking, rest period, daily/weekly hours) are absolute. The 7th-day rule has documented exceptions in labour law; overrides are audit-logged with a mandatory reason.
+**Only the seventh-consecutive-day rule is overridable.**
+Labour law has documented exceptions for the seven-day rule, managers
+occasionally need to schedule someone across a full week during peak
+periods. The other seven constraints (skill, certification, double-booking,
+rest period, daily hours, weekly hours) have no legitimate exceptions in
+this context and are treated as hard failures. When a manager overrides
+the consecutive-day check they must provide a written reason which is
+stored permanently in the audit log under OVERRIDE_7TH_DAY.
 
-**3. Swap approval architecture.** DROP requests have no pre-selected recipient at creation. The manager chooses the `pickupUserId` at approval time. SWAP requests require the target to accept first (all 8 constraints re-run for Staff B), then escalate to manager approval — a two-stage gate.
+**Two-stage swap approval.**
+A swap goes through Staff B accepting first, then manager approval.
+When Staff B accepts, all eight constraints run for them, not just skill.
+This catches cases where Staff B would be double-booked, under-rested,
+or over their weekly hours if the swap went through. The original
+assignment stays active throughout the process so neither party is left
+uncovered if the swap falls apart.
 
-**4. JWT-only sessions with zero DB hits.** All session data is encoded in the JWT once at sign-in. `locationIds` reflects the user's assignments at that moment. Newly assigned locations require sign-out/sign-in to take effect — accepted trade-off for zero-latency auth.
+**JWT carries location access, no database hit on auth.**
+Location IDs are baked into the JWT at sign-in time. Every API route
+checks the session's locationIds against the requested locationId without
+touching the database. The trade-off is that if a manager is assigned to
+a new location, they need to sign out and back in for it to take effect.
+For an internal tool with infrequent location changes this is acceptable
+and keeps every authenticated request free of extra queries.
 
-**5. isPremium auto-classification.** Shifts starting Friday or Saturday after 17:00 in the location's timezone are automatically `isPremium = true`. The fairness analytics engine uses this to calculate equity scores; below 0.7 is flagged. Maria's seed data demonstrates this gap deliberately.
+**isPremium is automatic, not manual.**
+Shifts starting on Friday or Saturday after 17:00 in the location's own
+timezone are automatically marked premium. Managers cannot override this.
+The fairness analytics engine uses this flag to calculate equity scores,
+whether premium shifts are distributed proportionally to total hours worked.
+Maria's seed account is set up with zero premium assignments while
+colleagues have three or more, producing a score well below the 0.7
+threshold that triggers a flag.
 
 ---
 
 ## Known Limitations
 
-- No real email sending — see `/admin/email-log` for simulated notifications
-- Password reset requires admin user edit or direct DB access
-- JWT `locationIds` staleness on new location assignments requires re-login
-- `GET /api/assignments?userId=` not yet implemented — staff schedule page uses swap data as fallback
-- Compliance page day-by-day hours breakdown requires a dedicated per-day query endpoint
-- Schedule grid not optimised for screens under 900px wide
-
----
-
-## Evaluation Scenarios
-
-**1. Overtime Warning** — Log in as `manager.nyc@coastal.com`. Open the NYC schedule. Assign any shift to Sarah Kim. The what-if preview shows her at 34h + new shift hours, triggering the orange overtime warning.
-
-**2. Timezone Tangle** — Log in as `manager.la@coastal.com`. Create an LA shift Monday 10:00–18:00 PT. Try to assign John Torres. The availability check converts his Eastern 09:00–17:00 to 06:00–14:00 PT and flags the conflict.
-
-**3. Fairness Analytics** — Log in as `manager.nyc@coastal.com`. Go to Analytics → New York City. Maria Reyes shows a fairness score below 0.7 (red flag). Carlos and John are above 1.0 (over-allocated premium shifts).
-
-**4. Swap Lifecycle** — Log in as `mike@coastal.com`, check Swaps. Log in as `john@coastal.com`, accept the incoming request (all 8 constraints run for John). Log in as `manager.nyc@coastal.com`, approve the swap — Mike's assignment cancelled, John assigned.
-
-**5. Understaffed Publish** — Log in as `manager.nyc@coastal.com`. Click Publish Week. The Saturday Server shift (headcount 3, only 2 assigned) appears in the confirmation warning before proceeding.
-
-**6. 7th Day Override** — Visit `/admin/audit` as admin, filter by `OVERRIDE_7TH_DAY`. The demonstration row shows Mike's documented override reason. Live: assign Mike to a 7th consecutive day shift — the constraint engine returns a hard block requiring an `overrideReason` field (min 10 chars).
-
-## Where to Find Simulated Emails
-
-All notification emails are stored and viewable at **`/admin/email-log`** (ADMIN role required). No real emails are sent.
-
----
-
-## Deployment to Vercel
-
-```bash
-# 1. Push code
-git push origin main
-
-# 2. Deploy
-npx vercel --prod
-
-# 3. Set all environment variables in Vercel Dashboard
-#    Project → Settings → Environment Variables
-
-# 4. Seed production database
-#    (with DATABASE_URL pointing to production)
-npx prisma db push
-npx prisma db seed
-
-# 5. Verify cron job at Vercel Dashboard → Cron Jobs
-#    /api/cron/expire-swaps runs hourly
-```
-
----
-
-## Prompt 6 Complete — Final Implementation Checklist
-
-1. `npm install recharts` (if not already in package.json)
-2. Paste all files at their exact paths (see project structure in handoff docs)
-3. Run `npx tsc --noEmit` — fix any type errors
-4. Run `npx prisma db push && npx prisma db seed`
-5. Confirm seed credentials table prints in terminal
-6. Verify login page at `http://localhost:3000/login`
-7. Verify all six evaluation scenarios manually:
-   - [ ] Overtime warning appears for Sarah
-   - [ ] Timezone constraint fires for John at LA
-   - [ ] Fairness flag on Maria in analytics
-   - [ ] Full swap lifecycle completes (pending → accepted → approved)
-   - [ ] Understaffed publish warning dialog appears
-   - [ ] OVERRIDE_7TH_DAY row visible in audit log
-8. Verify schedule builder specifically:
-   - [ ] Click empty day area opens create shift dialog
-   - [ ] Overnight indicator shows when end < start time
-   - [ ] Shift card click opens right-side assignment sheet
-   - [ ] Staff preview modal shows hours + cost
-   - [ ] Constraint failure panel shows red reasons + suggestion chips
-   - [ ] Overtime sidebar updates after assignment
-   - [ ] Realtime: two windows, assign in one, other refreshes
-9. Deploy: `npx vercel --prod`
-10. Seed production: `npx prisma db seed`
-11. Submit live URL
+- No real email delivery. All notification emails are written to the
+  EmailLog table. View them at /admin/email-log.
+- Password reset requires admin intervention — no self-service reset flow.
+- The hourly cron job that expires stale swap requests requires Vercel Pro.
+  On the free Hobby plan, swap expiry runs lazily when the swaps endpoint
+  is called instead of on a schedule.
+- JWT location IDs require a re-login after new location assignments.
+- The schedule grid is designed for screens 900px and wider.
