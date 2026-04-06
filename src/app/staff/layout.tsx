@@ -4,6 +4,8 @@ import { redirect } from 'next/navigation'
 import { Sidebar, type NavItem } from '@/components/sidebar'
 import { ToastProvider } from '@/hooks/toast'
 import '../shiftsync.css'
+import { SessionProvider } from 'next-auth/react'
+import { AuthProvider } from '@/components/client-provider'
 
 const icon = (d: string) => (
   <svg
@@ -74,18 +76,20 @@ export default async function StaffLayout({
   if (!session?.user || session.user.role !== 'STAFF') redirect('/login')
 
   return (
-    <ToastProvider>
-      <div className='ss-shell'>
-        <Sidebar
-          role='STAFF'
-          userName={session.user.name ?? ''}
-          userId={session.user.id}
-          navItems={NAV_ITEMS}
-        />
-        <main className='ss-main'>
-          <div className='ss-content'>{children}</div>
-        </main>
-      </div>
-    </ToastProvider>
+    <AuthProvider session={session}>
+      <ToastProvider>
+        <div className='ss-shell'>
+          <Sidebar
+            role='STAFF'
+            userName={session.user.name ?? ''}
+            userId={session.user.id}
+            navItems={NAV_ITEMS}
+          />
+          <main className='ss-main'>
+            <div className='ss-content'>{children}</div>
+          </main>
+        </div>
+      </ToastProvider>
+    </AuthProvider>
   )
 }
