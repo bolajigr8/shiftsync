@@ -1,0 +1,334 @@
+// =============================================================================
+// ShiftSync — Prisma Schema
+// Multi-location staff scheduling for Coastal Eats restaurant group
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  // URL is resolved by prisma.config.ts at CLI time, and by src/lib/database-url.ts
+  // at runtime. Do not add url = env("...") here — it would conflict.
+  provider = "postgresql"
+}
+
+// =============================================================================
+// Enums
+// =============================================================================
+
+enum Role {
+  ADMIN
+  MANAGER
+  STAFF
+}
+
+enum Skill {
+  BARTENDER
+  LINE_COOK
+  SERVER
+  HOST
+}
+
+enum AvailabilityType {
+  RECURRING
+  EXCEPTION
+}
+
+enum ShiftStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+}
+
+enum AssignmentStatus {
+  ASSIGNED
+  CONFIRMED
+  CANCELLED
+}
+
+enum SwapType {
+  SWAP
+  DROP
+}
+
+enum SwapStatus {
+  PENDING
+  ACCEPTED
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  CANCELLED
+  EXPIRED
+  AUTO_CANCELLED
+}
+
+enum NotificationType {
+  SHIFT_ASSIGNED
+  SCHEDULE_PUBLISHED
+  SCHEDULE_UNPUBLISHED
+  SHIFT_CHANGED
+  SWAP_REQUEST
+  SWAP_ACCEPTED
+  SWAP_REJECTED
+  SWAP_CANCELLED
+  SWAP_AUTO_CANCELLED
+  MANAGER_APPROVAL_NEEDED
+  OVERTIME_WARNING
+  AVAILABILITY_CHANGED
+  COVERAGE_NEEDED
+}
+
+enum AuditAction {
+  SHIFT_CREATED
+  SHIFT_EDITED
+  SHIFT_PUBLISHED
+  SHIFT_UNPUBLISHED
+  SHIFT_CANCELLED
+  ASSIGNED
+  UNASSIGNED
+  SWAP_APPROVED
+  SWAP_REJECTED
+  OVERRIDE_7TH_DAY
+}
+
+// =============================================================================
+// Models
+// =============================================================================
+
+model User {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  passwordHash      String
+  name              String
+  role              Role
+  /// IANA timezone identifier e.g. "America/New_York"
+  timezone          String
+  desiredWeeklyHours Int?
+  /// Required for overtime cost projections
+  hourlyRate        Decimal? @db.Decimal(10, 2)
+  /// Per-notification-type toggles: { "SHIFT_ASSIGNED": { "inApp": true, "email": false }, ... }
+  notificationPrefs Json     @default("{}")
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  staffLocations    StaffLocation[]
+  managerLocations  ManagerLocation[]
+  skills            StaffSkill[]
+  availabilities    Availability[]
+  shiftAssignments  ShiftAssignment[]  @relation("AssignedUser")
+  assignedByShifts  ShiftAssignment[]  @relation("AssignedByUser")
+  createdShifts     Shift[]
+  swapRequests      SwapRequest[]      @relation("SwapRequester")
+  swapTargets       SwapRequest[]      @relation("SwapTarget")
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+  emailLogs         EmailLog[]
+
+  @@index([email])
+  @@index([role])
+  @@index([isActive])
+}
+
+model Location {
+  id             String   @id @default(cuid())
+  name           String
+  /// IANA timezone identifier e.g. "America/Chicago"
+  timezone       String
+  address        String?
+  /// Hours before shift start time when the schedule locks for edits
+  editCutoffHours Int     @default(48)
+  isActive       Boolean  @default(true)
+
+  // Relations
+  staffLocations   StaffLocation[]
+  managerLocations ManagerLocation[]
+  shifts           Shift[]
+  auditLogs        AuditLog[]
+
+  @@index([isActive])
+}
+
+/// Join table: which locations each staff member is certified to work at.
+/// isActive=false means decertified but historical data is preserved.
+model StaffLocation {
+  userId         String
+  locationId     String
+  isActive       Boolean   @default(true)
+  certifiedAt    DateTime  @default(now())
+  decertifiedAt  DateTime?
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@id([userId, locationId])
+  @@index([locationId])
+  @@index([isActive])
+}
+
+/// Join table: which locations each manager is responsible for.
+model ManagerLocation {
+  userId     String
+  locationId String
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@id([userId, locationId])
+  @@index([locationId])
+}
+
+model StaffSkill {
+  userId String
+  skill  Skill
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, skill])
+  @@index([skill])
+}
+
+model Availability {
+  id            String           @id @default(cuid())
+  userId        String
+  type          AvailabilityType
+  /// 0=Sunday … 6=Saturday; only set for RECURRING rows
+  dayOfWeek     Int?
+  /// HH:mm in the user's LOCAL timezone — never UTC, to survive DST transitions
+  startTime     String?
+  /// HH:mm in the user's LOCAL timezone — never UTC
+  endTime       String?
+  /// Only set for EXCEPTION rows
+  exceptionDate DateTime?
+  isAvailable   Boolean          @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([userId, dayOfWeek])
+}
+
+model Shift {
+  id             String      @id @default(cuid())
+  locationId     String
+  requiredSkill  Skill
+  /// Always stored in UTC
+  startTime      DateTime
+  /// Always stored in UTC; strictly > startTime even for overnight shifts
+  endTime        DateTime
+  headcountNeeded Int
+  status         ShiftStatus @default(DRAFT)
+  /// Auto-set to true for Fri/Sat shifts starting after 17:00 in the location's timezone
+  isPremium      Boolean     @default(false)
+  publishedAt    DateTime?
+  createdBy      String
+
+  location  Location          @relation(fields: [locationId], references: [id])
+  creator   User              @relation(fields: [createdBy], references: [id])
+  assignments ShiftAssignment[]
+
+  @@index([locationId, status])
+  @@index([locationId, startTime])
+  @@index([status, startTime])
+  @@index([createdBy])
+}
+
+model ShiftAssignment {
+  id          String           @id @default(cuid())
+  shiftId     String
+  userId      String
+  status      AssignmentStatus @default(ASSIGNED)
+  assignedBy  String
+  assignedAt  DateTime         @default(now())
+
+  shift      Shift        @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  user       User         @relation("AssignedUser", fields: [userId], references: [id])
+  assigner   User         @relation("AssignedByUser", fields: [assignedBy], references: [id])
+  swapRequests SwapRequest[]
+
+  @@unique([shiftId, userId])
+  @@index([userId, status])
+  @@index([shiftId])
+}
+
+model SwapRequest {
+  id            String     @id @default(cuid())
+  assignmentId  String
+  /// Staff A — the person initiating the swap or drop
+  requesterId   String
+  /// Staff B — null for DROP type requests
+  targetUserId  String?
+  type          SwapType
+  status        SwapStatus @default(PENDING)
+  /// Populated when a manager rejects the request
+  managerReason String?
+  /// Shift startTime minus 24 hours
+  expiresAt     DateTime
+
+  assignment ShiftAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  requester  User            @relation("SwapRequester", fields: [requesterId], references: [id])
+  target     User?           @relation("SwapTarget", fields: [targetUserId], references: [id])
+
+  @@index([requesterId, status])
+  @@index([targetUserId, status])
+  @@index([status, expiresAt])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  message   String
+  /// { shiftId?: string, swapId?: string } for deep linking
+  metadata  Json             @default("{}")
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+}
+
+model AuditLog {
+  id             String      @id @default(cuid())
+  actorId        String
+  action         AuditAction
+  entityType     String
+  entityId       String
+  /// Full state snapshot before the change
+  before         Json?
+  /// Full state snapshot after the change
+  after          Json?
+  /// Required documentation when manager overrides the 7th consecutive day rule
+  overrideReason String?
+  /// Denormalised for filtering audit exports without joins
+  locationId     String
+  createdAt      DateTime    @default(now())
+
+  actor    User     @relation(fields: [actorId], references: [id])
+  location Location @relation(fields: [locationId], references: [id])
+
+  @@index([locationId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+  @@index([action])
+}
+
+model EmailLog {
+  id               String   @id @default(cuid())
+  toUserId         String
+  /// Denormalised for display without a join
+  toEmail          String
+  subject          String
+  body             String
+  notificationType String
+  createdAt        DateTime @default(now())
+
+  toUser User @relation(fields: [toUserId], references: [id])
+
+  @@index([toUserId, createdAt])
+  @@index([notificationType])
+}
