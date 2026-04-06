@@ -21,7 +21,6 @@ type FairnessEntry = {
   desiredWeeklyHours: number | null
   fairnessScore: number | null
   flagged: boolean
-  status?: 'OK' | 'WARNING' | 'OVERTIME' // add this
 }
 
 type Location = { id: string; name: string }
@@ -193,13 +192,7 @@ export default function AnalyticsPage() {
                     {data.map((entry, i) => (
                       <Cell
                         key={i}
-                        fill={
-                          entry.status === 'OVERTIME'
-                            ? '#dc2626'
-                            : entry.status === 'WARNING'
-                              ? '#d97706'
-                              : '#ea580c'
-                        }
+                        fill={entry.flagged ? '#dc2626' : '#ea580c'}
                       />
                     ))}
                   </Bar>

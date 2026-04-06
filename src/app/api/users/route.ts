@@ -1,11 +1,3 @@
-// =============================================================================
-// ShiftSync — GET /api/users (list) + POST /api/users (create)
-//
-// GET  — MANAGER / ADMIN. Filterable by locationId and skill.
-//        Managers are automatically scoped to their own locations.
-// POST — ADMIN only. Creates a new user with a bcrypt-hashed password.
-// =============================================================================
-
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -39,22 +31,16 @@ export async function GET(req: NextRequest) {
     )
   }
 
-  if (session.user.role === 'STAFF') {
-    return NextResponse.json(
-      { success: false, error: 'Forbidden' },
-      { status: 403 },
-    )
-  }
-
   const { searchParams } = new URL(req.url)
   const locationId = searchParams.get('locationId')
   const skill = searchParams.get('skill')
 
-  // Build location filter — managers are always scoped to their own locations
+  // STAFF can view colleagues scoped to their own locations (needed for swap target selection).
+  // MANAGER scoped to their locationIds. ADMIN sees all.
   const effectiveLocationIds =
     session.user.role === 'ADMIN' ? null : session.user.locationIds
 
-  // If a specific locationId is requested by a manager, verify it's accessible
+  // Validate requested locationId is within the caller's scope
   if (
     locationId &&
     effectiveLocationIds &&
@@ -64,6 +50,15 @@ export async function GET(req: NextRequest) {
       { success: false, error: 'Forbidden' },
       { status: 403 },
     )
+  }
+
+  // STAFF with no locationIds at all — guard
+  if (
+    session.user.role === 'STAFF' &&
+    !locationId &&
+    !effectiveLocationIds?.length
+  ) {
+    return NextResponse.json({ success: true, data: [] })
   }
 
   const where: Prisma.UserWhereInput = {

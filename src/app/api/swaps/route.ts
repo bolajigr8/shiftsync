@@ -1,7 +1,3 @@
-// =============================================================================
-// ShiftSync — Swap Requests: GET (list) + POST (create)
-// =============================================================================
-
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -37,6 +33,47 @@ export async function GET(req: NextRequest) {
   }
 
   const { id: userId, role, locationIds } = session.user
+
+  const { searchParams } = new URL(req.url)
+  const showDrops = searchParams.get('drops') === 'true'
+
+  if (role === 'STAFF' && showDrops) {
+    // Return all PENDING DROP requests at the user's certified locations
+    // that they are eligible to pick up (excluding their own)
+    const swaps = await db.swapRequest.findMany({
+      where: {
+        type: 'DROP',
+        status: 'PENDING',
+        requesterId: { not: userId },
+        assignment: {
+          shift: {
+            locationId: { in: locationIds },
+            startTime: { gte: new Date() },
+          },
+        },
+      },
+      include: {
+        assignment: {
+          include: {
+            shift: {
+              select: {
+                id: true,
+                startTime: true,
+                endTime: true,
+                requiredSkill: true,
+                locationId: true,
+                location: { select: { name: true, timezone: true } },
+              },
+            },
+          },
+        },
+        requester: { select: { id: true, name: true } },
+        target: { select: { id: true, name: true } },
+      },
+      orderBy: { expiresAt: 'asc' },
+    })
+    return NextResponse.json({ success: true, data: swaps })
+  }
 
   if (role === 'STAFF') {
     const swaps = await db.swapRequest.findMany({

@@ -1,20 +1,9 @@
-// =============================================================================
-// ShiftSync — GET /api/users/[id] + PUT /api/users/[id]
-//
-// GET — any authenticated user can read their own profile; MANAGER/ADMIN can
-//       read any user within their location scope.
-//
-// PUT — update profile fields, skills (MANAGER/ADMIN), and location
-//       certifications (ADMIN only). Skills and locations are replaced
-//       atomically inside a single transaction.
-// =============================================================================
-
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/prisma/db'
-import { Prisma } from '@prisma/client'
 import { z } from 'zod'
+import bcrypt from 'bcryptjs'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -25,11 +14,12 @@ const updateUserSchema = z.object({
   timezone: z.string().min(1).optional(),
   desiredWeeklyHours: z.number().int().positive().nullable().optional(),
   hourlyRate: z.number().positive().nullable().optional(),
-  // Fix 1: Zod v4 requires an explicit key schema as the first argument to z.record()
   notificationPrefs: z
     .record(z.string(), z.object({ inApp: z.boolean(), email: z.boolean() }))
     .optional(),
   isActive: z.boolean().optional(),
+  // Users may change their own password
+  password: z.string().min(8).optional(),
   // MANAGER/ADMIN only — full replacement of the user's skill set
   skills: z.array(z.enum(VALID_SKILLS)).optional(),
   // ADMIN only — full replacement of the user's active StaffLocation rows
@@ -136,21 +126,21 @@ export async function PUT(req: NextRequest, { params }: RouteContext) {
     )
   }
 
-  // Fix 2: Destructure notificationPrefs separately so it can be cast to
-  // Prisma.InputJsonValue, avoiding the type mismatch with Prisma's JSON field.
-  const { skills, staffLocationIds, isActive, notificationPrefs, ...rest } =
+  const { skills, staffLocationIds, isActive, password, ...profileData } =
     parsed.data
 
-  const profileUpdate = {
-    ...rest,
-    // Cast notificationPrefs to satisfy Prisma's InputJsonValue expectation
-    ...(notificationPrefs !== undefined && {
-      notificationPrefs: notificationPrefs as Prisma.InputJsonValue,
-    }),
-    // STAFF cannot toggle their own isActive flag
-    ...(session.user.role !== 'STAFF' &&
-      isActive !== undefined && { isActive }),
-  }
+  // Hash password if provided
+  const passwordHash = password ? await bcrypt.hash(password, 12) : undefined
+
+  // STAFF cannot toggle their own isActive flag
+  const profileUpdate =
+    session.user.role === 'STAFF'
+      ? { ...profileData, ...(passwordHash && { passwordHash }) }
+      : {
+          ...profileData,
+          ...(isActive !== undefined && { isActive }),
+          ...(passwordHash && { passwordHash }),
+        }
 
   await db.$transaction(async (tx) => {
     // Update core profile fields

@@ -1,12 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { useToast } from '@/hooks/toast'
 
+// ── Types ────────────────────────────────────────────────────────────────────
+
 type ShiftAssignment = {
   id: string
-  status: string
+  status: 'ASSIGNED' | 'CONFIRMED' | 'CANCELLED'
   shift: {
     id: string
     startTime: string
@@ -14,11 +16,13 @@ type ShiftAssignment = {
     requiredSkill: string
     status: string
     locationId: string
-    location: { name: string; timezone: string }
+    location: { id: string; name: string; timezone: string }
   }
 }
 
 type Coworker = { id: string; name: string }
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 const SKILL_LABELS: Record<string, string> = {
   BARTENDER: 'Bartender',
@@ -27,44 +31,53 @@ const SKILL_LABELS: Record<string, string> = {
   HOST: 'Host',
 }
 
-const STATUS_BADGE: Record<string, string> = {
+const STATUS_STYLE: Record<string, string> = {
   ASSIGNED: 'badge-muted',
   CONFIRMED: 'badge-ok',
   CANCELLED: 'badge-error',
 }
 
-function formatShiftTime(start: string, end: string, tz: string) {
-  const opts: Intl.DateTimeFormatOptions = {
-    timeZone: tz,
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZoneName: 'short',
-  }
-  const startStr = new Date(start).toLocaleString('en-US', opts)
-  const endStr = new Date(end).toLocaleTimeString('en-US', {
+/** Format shift time in the location's own timezone */
+function formatShiftTime(startISO: string, endISO: string, tz: string) {
+  const opts = (
+    extra?: Intl.DateTimeFormatOptions,
+  ): Intl.DateTimeFormatOptions => ({
     timeZone: tz,
     hour: 'numeric',
     minute: '2-digit',
+    ...extra,
   })
-  return { startStr, endStr }
+  const dateLabel = new Date(startISO).toLocaleDateString('en-US', {
+    timeZone: tz,
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  })
+  const startTime = new Date(startISO).toLocaleTimeString('en-US', opts())
+  const endTime = new Date(endISO).toLocaleTimeString(
+    'en-US',
+    opts({ timeZoneName: 'short' }),
+  )
+  return { dateLabel, startTime, endTime }
 }
 
-function within24h(startTime: string) {
-  return new Date(startTime).getTime() - Date.now() < 24 * 60 * 60 * 1000
+/** True when shift starts within 24 hours */
+function within24h(startISO: string): boolean {
+  return new Date(startISO).getTime() - Date.now() < 24 * 60 * 60 * 1000
 }
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function StaffSchedulePage() {
   const { data: session } = useSession()
   const { toast } = useToast()
+
   const [assignments, setAssignments] = useState<ShiftAssignment[]>([])
   const [coworkers, setCoworkers] = useState<Coworker[]>([])
   const [loading, setLoading] = useState(true)
   const [confirming, setConfirming] = useState<string | null>(null)
 
-  // Swap dialog state
+  // Swap / Drop dialog state
   const [swapOpen, setSwapOpen] = useState(false)
   const [swapAssignment, setSwapAssignment] = useState<ShiftAssignment | null>(
     null,
@@ -74,51 +87,42 @@ export default function StaffSchedulePage() {
   const [submitting, setSubmitting] = useState(false)
   const [swapError, setSwapError] = useState('')
 
-  async function load() {
+  // ── Data loading ─────────────────────────────────────────────────────────
+
+  const load = useCallback(async () => {
     if (!session?.user) return
     setLoading(true)
-    // Fetch via swaps endpoint — assignments come from the shift assignments API
-    const [swapRes, userRes] = await Promise.all([
-      fetch('/api/swaps').then((r) => r.json()),
-      fetch('/api/users').then((r) => r.json()),
+
+    const [assignRes, userRes] = await Promise.all([
+      fetch(`/api/assignments?userId=${session.user.id}`)
+        .then((r) => r.json())
+        .catch(() => ({ success: false })),
+      // Fetch colleagues for the swap target selector (scoped to shared locations)
+      fetch('/api/users')
+        .then((r) => r.json())
+        .catch(() => ({ success: false })),
     ])
-    // For own assignments, derive from swap data or fetch directly
-    const assignRes = await fetch(`/api/users/${session.user.id}`).then((r) =>
-      r.json(),
-    )
-    // The user detail doesn't return assignments — use shifts list instead
-    // Fetch published upcoming shifts where user is assigned
-    const shiftsRes = await fetch('/api/swaps').then((r) => r.json())
+
+    if (assignRes.success) {
+      setAssignments(assignRes.data)
+    }
 
     if (userRes.success) {
-      setCoworkers(userRes.data.filter((u: any) => u.id !== session.user.id))
-    }
-
-    // Load actual assignments from assignments endpoint
-    const aRes = await fetch(`/api/assignments?userId=${session.user.id}`)
-      .then((r) => r.json())
-      .catch(() => ({ success: false }))
-    if (aRes.success) {
-      setAssignments(
-        aRes.data
-          .filter(
-            (a: ShiftAssignment) =>
-              a.status !== 'CANCELLED' &&
-              new Date(a.shift.startTime) > new Date(),
-          )
-          .sort(
-            (a: ShiftAssignment, b: ShiftAssignment) =>
-              new Date(a.shift.startTime).getTime() -
-              new Date(b.shift.startTime).getTime(),
-          ),
+      setCoworkers(
+        (userRes.data as (Coworker & { id: string })[]).filter(
+          (u) => u.id !== session.user.id,
+        ),
       )
     }
+
     setLoading(false)
-  }
+  }, [session?.user?.id])
 
   useEffect(() => {
     load()
-  }, [session])
+  }, [load])
+
+  // ── Confirm assignment ────────────────────────────────────────────────────
 
   async function handleConfirm(assignmentId: string) {
     setConfirming(assignmentId)
@@ -132,9 +136,19 @@ export default function StaffSchedulePage() {
       toast('Shift confirmed!', 'success')
       load()
     } else {
-      toast(data.error ?? 'Failed to confirm', 'error')
+      toast(data.error ?? 'Failed to confirm shift', 'error')
     }
     setConfirming(null)
+  }
+
+  // ── Swap / Drop dialog ────────────────────────────────────────────────────
+
+  function openSwapDialog(assignment: ShiftAssignment) {
+    setSwapAssignment(assignment)
+    setSwapType('SWAP')
+    setSwapTarget('')
+    setSwapError('')
+    setSwapOpen(true)
   }
 
   async function handleSwapSubmit(e: React.FormEvent) {
@@ -142,6 +156,7 @@ export default function StaffSchedulePage() {
     if (!swapAssignment) return
     setSubmitting(true)
     setSwapError('')
+
     const res = await fetch('/api/swaps', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -152,16 +167,20 @@ export default function StaffSchedulePage() {
       }),
     })
     const data = await res.json()
+
     if (data.success) {
       setSwapOpen(false)
-      toast('Swap request submitted', 'success')
+      toast(
+        'Request submitted — your assignment stays active until a manager approves.',
+        'success',
+      )
     } else {
       setSwapError(data.error ?? 'Failed to submit request')
     }
     setSubmitting(false)
   }
 
-  if (loading) return <div className='loading-row'>Loading your schedule…</div>
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className='animate-in'>
@@ -169,12 +188,14 @@ export default function StaffSchedulePage() {
         <div>
           <h1 className='page-title'>My Schedule</h1>
           <p className='page-subtitle'>
-            Your upcoming shifts — times shown in each location's local timezone
+            Upcoming shifts — times shown in each location's local timezone
           </p>
         </div>
       </div>
 
-      {assignments.length === 0 ? (
+      {loading ? (
+        <div className='loading-row'>Loading your schedule…</div>
+      ) : assignments.length === 0 ? (
         <div className='card'>
           <div className='empty-state'>
             <div className='empty-state-icon'>☀️</div>
@@ -188,12 +209,13 @@ export default function StaffSchedulePage() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {assignments.map((a, i) => {
-            const { startStr, endStr } = formatShiftTime(
+            const { dateLabel, startTime, endTime } = formatShiftTime(
               a.shift.startTime,
               a.shift.endTime,
               a.shift.location.timezone,
             )
             const locked = within24h(a.shift.startTime)
+
             return (
               <div key={a.id} className={`card animate-in delay-${i % 4}`}>
                 <div
@@ -205,13 +227,14 @@ export default function StaffSchedulePage() {
                     gap: 16,
                   }}
                 >
-                  <div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {/* Skill + status badges */}
                     <div
                       style={{
                         display: 'flex',
                         alignItems: 'center',
                         gap: 8,
-                        marginBottom: 6,
+                        marginBottom: 8,
                       }}
                     >
                       <span
@@ -227,27 +250,39 @@ export default function StaffSchedulePage() {
                           border: '1px solid #fed7aa',
                         }}
                       >
-                        {SKILL_LABELS[a.shift.requiredSkill]}
+                        {SKILL_LABELS[a.shift.requiredSkill] ??
+                          a.shift.requiredSkill}
                       </span>
                       <span
-                        className={`badge ${STATUS_BADGE[a.status] ?? 'badge-muted'}`}
+                        className={`badge ${STATUS_STYLE[a.status] ?? 'badge-muted'}`}
                       >
                         {a.status}
                       </span>
                     </div>
+
+                    {/* Location + time */}
                     <div
                       style={{ fontWeight: 600, fontSize: 15, marginBottom: 3 }}
                     >
                       {a.shift.location.name}
                     </div>
                     <div
-                      style={{ fontSize: 13.5, color: 'var(--ss-text-muted)' }}
+                      style={{ fontSize: 14, color: 'var(--ss-text-muted)' }}
                     >
-                      {startStr} – {endStr}
+                      {dateLabel}
                     </div>
                     <div
                       style={{
-                        fontSize: 12,
+                        fontSize: 13.5,
+                        color: 'var(--ss-text-muted)',
+                        marginTop: 2,
+                      }}
+                    >
+                      {startTime} – {endTime}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 11.5,
                         color: 'var(--ss-text-faint)',
                         marginTop: 3,
                       }}
@@ -256,13 +291,14 @@ export default function StaffSchedulePage() {
                     </div>
                   </div>
 
+                  {/* Action buttons */}
                   <div
                     style={{
                       display: 'flex',
                       gap: 8,
                       flexShrink: 0,
-                      flexWrap: 'wrap',
-                      justifyContent: 'flex-end',
+                      flexDirection: 'column',
+                      alignItems: 'flex-end',
                     }}
                   >
                     {a.status === 'ASSIGNED' && (
@@ -271,37 +307,25 @@ export default function StaffSchedulePage() {
                         disabled={confirming === a.id}
                         onClick={() => handleConfirm(a.id)}
                       >
-                        {confirming === a.id ? '…' : 'Confirm'}
+                        {confirming === a.id ? 'Confirming…' : 'Confirm'}
                       </button>
                     )}
 
-                    {/* Swap/Drop button with tooltip when locked */}
-                    <div
-                      style={{ position: 'relative' }}
-                      className='swap-btn-wrap'
+                    <button
+                      className='btn btn-secondary btn-sm'
+                      disabled={locked}
+                      title={
+                        locked
+                          ? 'Cannot request a swap within 24 hours of shift start'
+                          : undefined
+                      }
+                      style={{ opacity: locked ? 0.5 : 1 }}
+                      onClick={() => {
+                        if (!locked) openSwapDialog(a)
+                      }}
                     >
-                      <button
-                        className='btn btn-secondary btn-sm'
-                        disabled={locked}
-                        style={{ opacity: locked ? 0.5 : 1 }}
-                        onClick={() => {
-                          if (!locked) {
-                            setSwapAssignment(a)
-                            setSwapType('SWAP')
-                            setSwapTarget('')
-                            setSwapError('')
-                            setSwapOpen(true)
-                          }
-                        }}
-                        title={
-                          locked
-                            ? 'Cannot request a swap within 24 hours of shift start'
-                            : ''
-                        }
-                      >
-                        {locked ? '🔒 Swap unavailable' : 'Request Swap / Drop'}
-                      </button>
-                    </div>
+                      {locked ? '🔒 Swap unavailable' : 'Request Swap / Drop'}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -310,7 +334,7 @@ export default function StaffSchedulePage() {
         </div>
       )}
 
-      {/* Swap / Drop Dialog */}
+      {/* ── Swap / Drop Dialog ── */}
       {swapOpen && swapAssignment && (
         <div
           className='modal-backdrop'
@@ -328,12 +352,14 @@ export default function StaffSchedulePage() {
                 ✕
               </button>
             </div>
+
             <form onSubmit={handleSwapSubmit}>
               <div className='modal-body'>
                 {swapError && (
                   <div className='alert alert-error'>{swapError}</div>
                 )}
 
+                {/* Shift summary */}
                 <div
                   style={{
                     background: '#faf9f7',
@@ -357,6 +383,7 @@ export default function StaffSchedulePage() {
                   </span>
                 </div>
 
+                {/* Type toggle */}
                 <div className='form-group'>
                   <label className='form-label'>Type</label>
                   <div style={{ display: 'flex', gap: 8 }}>
@@ -376,10 +403,11 @@ export default function StaffSchedulePage() {
                   <p className='form-hint' style={{ marginTop: 8 }}>
                     {swapType === 'SWAP'
                       ? 'Choose a colleague to swap with. They must accept before a manager approves.'
-                      : 'Open to any eligible staff member. Manager selects who picks it up.'}
+                      : 'Open for any eligible staff member. A manager selects who picks it up.'}
                   </p>
                 </div>
 
+                {/* Swap target */}
                 {swapType === 'SWAP' && (
                   <div className='form-group'>
                     <label className='form-label'>Swap with *</label>
@@ -396,9 +424,18 @@ export default function StaffSchedulePage() {
                         </option>
                       ))}
                     </select>
+                    {coworkers.length === 0 && (
+                      <p
+                        className='form-hint'
+                        style={{ color: 'var(--ss-warn)' }}
+                      >
+                        No colleagues found at your location.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
+
               <div className='modal-footer'>
                 <button
                   type='button'

@@ -1,21 +1,3 @@
-// =============================================================================
-// ShiftSync — GET /api/audit
-//
-// Returns paginated AuditLog entries with actor name and location name joined.
-//
-// Query params (all optional):
-//   locationId  — filter by a single location
-//   start       — ISO datetime lower bound on createdAt
-//   end         — ISO datetime upper bound on createdAt
-//   action      — AuditAction enum value e.g. SWAP_APPROVED
-//   page        — 1-based (default 1)
-//   limit       — max 100 (default 50)
-//
-// ADMIN  → sees all locations
-// MANAGER → automatically scoped to their locationIds
-// STAFF  → 403
-// =============================================================================
-
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -73,13 +55,12 @@ export async function GET(req: NextRequest) {
 
   const where: Prisma.AuditLogWhereInput = {
     ...locationFilter,
-    ...(start && { createdAt: { gte: new Date(start) } }),
-    ...(end && { createdAt: { lte: new Date(end) } }),
-    // Spread both date conditions together when both are present
-    ...(start &&
-      end && {
-        createdAt: { gte: new Date(start), lte: new Date(end) },
-      }),
+    ...((start || end) && {
+      createdAt: {
+        ...(start && { gte: new Date(start) }),
+        ...(end && { lte: new Date(end) }),
+      },
+    }),
     ...(action && { action: action as Prisma.EnumAuditActionFilter }),
   }
 

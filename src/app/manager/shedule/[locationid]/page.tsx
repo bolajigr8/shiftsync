@@ -614,7 +614,6 @@ export default function SchedulePage() {
                             .map((a) => (
                               <div
                                 key={a.id}
-                                title={a.user.name}
                                 style={{
                                   width: 22,
                                   height: 22,
@@ -628,6 +627,7 @@ export default function SchedulePage() {
                                   fontWeight: 700,
                                   // title: a.user.name,
                                 }}
+                                title={a.user.name}
                               >
                                 {initials(a.user.name)}
                               </div>

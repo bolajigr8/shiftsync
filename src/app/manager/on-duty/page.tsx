@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 
 type OnDutyShift = {
   id: string
@@ -44,7 +44,7 @@ export default function OnDutyPage() {
   const [lastRefresh, setLastRefresh] = useState(new Date())
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  async function fetchAll(locs: Location[]) {
+  const fetchAll = useCallback(async (locs: Location[]) => {
     const results = await Promise.all(
       locs.map((loc) =>
         fetch(`/api/on-duty?locationId=${loc.id}`)
@@ -63,7 +63,8 @@ export default function OnDutyPage() {
     setData(map)
     setLastRefresh(new Date())
     setLoading(false)
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     fetch('/api/admin/locations')

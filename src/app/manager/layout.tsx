@@ -1,12 +1,8 @@
-// =============================================================================
-// ShiftSync — Manager Layout (updated with all nav items)
-// =============================================================================
-
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
-import { db } from '@/prisma/db'
 import { Sidebar, type NavItem } from '@/components/sidebar'
+import { ToastProvider } from '@/hooks/toast'
 
 export default async function ManagerLayout({
   children,
@@ -115,16 +111,18 @@ export default async function ManagerLayout({
   ]
 
   return (
-    <div className='ss-shell'>
-      <Sidebar
-        role='MANAGER'
-        userName={session.user.name ?? ''}
-        userId={session.user.id}
-        navItems={NAV_ITEMS}
-      />
-      <main className='ss-main'>
-        <div className='ss-content'>{children}</div>
-      </main>
-    </div>
+    <ToastProvider>
+      <div className='ss-shell'>
+        <Sidebar
+          role='MANAGER'
+          userName={session.user.name ?? ''}
+          userId={session.user.id}
+          navItems={NAV_ITEMS}
+        />
+        <main className='ss-main'>
+          <div className='ss-content'>{children}</div>
+        </main>
+      </div>
+    </ToastProvider>
   )
 }

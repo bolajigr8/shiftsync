@@ -30,9 +30,14 @@ function timeAgo(iso: string) {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
-function getNavTarget(metadata: Record<string, string>): string | null {
-  if (metadata.shiftId) return `/staff/schedule`
-  if (metadata.swapId) return `/staff/swaps`
+function getNavTarget(
+  metadata: Record<string, string>,
+  role: string,
+): string | null {
+  const base =
+    role === 'STAFF' ? '/staff' : role === 'MANAGER' ? '/manager' : '/admin'
+  if (metadata.swapId) return `${base}/swaps`
+  if (metadata.shiftId) return role === 'STAFF' ? '/staff/schedule' : null
   return null
 }
 
@@ -45,17 +50,13 @@ export function NotificationBell({
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
-  const popoverRef = useRef<HTMLDivElement>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
   const { notifications, unreadCount, markOneRead, markAllRead } =
     useNotifications(userId)
 
-  // Close on outside click
   useEffect(() => {
     function handle(e: MouseEvent) {
-      if (
-        popoverRef.current &&
-        !popoverRef.current.contains(e.target as Node)
-      ) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
         setOpen(false)
       }
     }
@@ -69,7 +70,7 @@ export function NotificationBell({
   ) {
     await markOneRead(id)
     setOpen(false)
-    const target = getNavTarget(metadata)
+    const target = getNavTarget(metadata, role)
     if (target) router.push(target)
   }
 
@@ -77,29 +78,30 @@ export function NotificationBell({
     role === 'STAFF'
       ? '/staff/notifications'
       : role === 'MANAGER'
-        ? '/manager/notifications'
-        : '/admin/notifications'
+        ? '/staff/notifications'
+        : '/staff/notifications'
 
   return (
-    <div style={{ position: 'relative' }} ref={popoverRef}>
-      {/* Bell button */}
+    <div style={{ position: 'relative' }} ref={wrapRef}>
       <button
         onClick={() => setOpen((o) => !o)}
         style={{
           position: 'relative',
-          background: 'none',
+          background: open ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.06)',
           border: 'none',
           cursor: 'pointer',
-          padding: '6px',
-          borderRadius: 8,
+          padding: '5px 6px',
+          borderRadius: 7,
           color: 'var(--ss-sidebar-text)',
-          transition: 'color 0.15s, background 0.15s',
+          transition: 'background 0.15s',
+          display: 'flex',
+          alignItems: 'center',
         }}
         title='Notifications'
       >
         <svg
-          width='18'
-          height='18'
+          width='16'
+          height='16'
           viewBox='0 0 24 24'
           fill='none'
           stroke='currentColor'
@@ -112,15 +114,16 @@ export function NotificationBell({
           <span
             style={{
               position: 'absolute',
-              top: 2,
-              right: 2,
-              width: 16,
-              height: 16,
+              top: 0,
+              right: 0,
+              width: 15,
+              height: 15,
               borderRadius: '50%',
               background: 'var(--ss-accent)',
               color: 'white',
-              fontSize: 9,
+              fontSize: 8,
               fontWeight: 700,
+              lineHeight: 1,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -131,21 +134,20 @@ export function NotificationBell({
         )}
       </button>
 
-      {/* Popover */}
+      {/* Popover — fixed position to the right of the 228px sidebar */}
       {open && (
         <div
           style={{
-            position: 'absolute',
-            bottom: 'calc(100% + 8px)',
-            left: '50%',
-            transform: 'translateX(-50%)',
+            position: 'fixed',
+            left: 240, // sidebar is 228px wide + 12px gap
+            bottom: 16, // align with footer area
             width: 340,
             background: 'white',
             borderRadius: 12,
-            boxShadow: '0 16px 48px rgba(0,0,0,0.18)',
+            boxShadow: '0 8px 40px rgba(0,0,0,0.18)',
             border: '1px solid var(--ss-border)',
             overflow: 'hidden',
-            zIndex: 50,
+            zIndex: 200,
             animation: 'fadeIn 0.15s ease both',
           }}
         >
@@ -159,12 +161,14 @@ export function NotificationBell({
               alignItems: 'center',
             }}
           >
-            <div style={{ fontWeight: 700, fontSize: 14 }}>
-              Notifications{' '}
+            <span
+              style={{ fontWeight: 700, fontSize: 14, color: 'var(--ss-text)' }}
+            >
+              Notifications
               {unreadCount > 0 && (
                 <span
                   style={{
-                    marginLeft: 6,
+                    marginLeft: 8,
                     padding: '1px 7px',
                     borderRadius: 100,
                     background: 'var(--ss-accent-light)',
@@ -173,10 +177,10 @@ export function NotificationBell({
                     fontWeight: 700,
                   }}
                 >
-                  {unreadCount} new
+                  {unreadCount}
                 </span>
               )}
-            </div>
+            </span>
             {unreadCount > 0 && (
               <button
                 onClick={markAllRead}
@@ -187,6 +191,7 @@ export function NotificationBell({
                   border: 'none',
                   cursor: 'pointer',
                   fontWeight: 500,
+                  fontFamily: 'inherit',
                 }}
               >
                 Mark all read
@@ -199,7 +204,7 @@ export function NotificationBell({
             {notifications.length === 0 ? (
               <div
                 style={{
-                  padding: '24px 16px',
+                  padding: '28px 16px',
                   textAlign: 'center',
                   color: 'var(--ss-text-faint)',
                   fontSize: 13.5,
@@ -218,50 +223,48 @@ export function NotificationBell({
                     gap: 10,
                     padding: '11px 16px',
                     borderBottom:
-                      i < notifications.length - 1
+                      i < 9 && i < notifications.length - 1
                         ? '1px solid var(--ss-border)'
                         : 'none',
                     cursor: 'pointer',
                     background: n.isRead ? 'transparent' : '#fffbf7',
                     transition: 'background 0.15s',
                   }}
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.background = '#faf9f7')
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.background = n.isRead
-                      ? 'transparent'
-                      : '#fffbf7')
-                  }
+                  onMouseEnter={(e) => {
+                    ;(e.currentTarget as HTMLElement).style.background =
+                      '#faf9f7'
+                  }}
+                  onMouseLeave={(e) => {
+                    ;(e.currentTarget as HTMLElement).style.background =
+                      n.isRead ? 'transparent' : '#fffbf7'
+                  }}
                 >
-                  {/* Dot */}
                   <div
                     style={{
                       width: 6,
                       height: 6,
                       borderRadius: '50%',
-                      marginTop: 6,
+                      marginTop: 7,
                       flexShrink: 0,
                       background: n.isRead ? 'transparent' : 'var(--ss-accent)',
                     }}
                   />
-                  {/* Icon */}
-                  <span style={{ fontSize: 16, flexShrink: 0 }}>
+                  <span style={{ fontSize: 15, flexShrink: 0 }}>
                     {TYPE_ICON[n.type] ?? '🔔'}
                   </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div
                       style={{
                         fontSize: 13,
+                        lineHeight: 1.45,
+                        marginBottom: 2,
                         color: n.isRead
                           ? 'var(--ss-text-muted)'
                           : 'var(--ss-text)',
-                        lineHeight: 1.45,
-                        marginBottom: 3,
                         overflow: 'hidden',
                         display: '-webkit-box',
                         WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical' as any,
+                        WebkitBoxOrient: 'vertical' as const,
                       }}
                     >
                       {n.message}
@@ -287,7 +290,13 @@ export function NotificationBell({
             <button
               onClick={() => {
                 setOpen(false)
-                router.push(notifListRoute)
+                router.push(
+                  role === 'STAFF'
+                    ? '/staff/notifications'
+                    : role === 'MANAGER'
+                      ? '/manager/notifications'
+                      : '/admin/notifications',
+                )
               }}
               style={{
                 width: '100%',
@@ -300,16 +309,9 @@ export function NotificationBell({
                 fontWeight: 500,
                 color: 'var(--ss-text-muted)',
                 fontFamily: 'inherit',
-                transition: 'background 0.15s',
               }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.background = 'var(--ss-bg)')
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.background = 'transparent')
-              }
             >
-              View all notifications
+              View all notifications →
             </button>
           </div>
         </div>
