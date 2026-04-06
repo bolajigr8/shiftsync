@@ -33,17 +33,11 @@ const NAV_ITEMS: NavItem[] = [
     icon: icon('M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01'),
   },
   {
-    href: '/staff/available-shifts',
+    href: '/staff/availability',
     label: 'Available Shifts',
     icon: icon('M21 21l-6-6m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0z'),
   },
-  {
-    href: '/staff/availability',
-    label: 'Availability',
-    icon: icon(
-      'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',
-    ),
-  },
+
   {
     href: '/staff/swaps',
     label: 'Swaps',
