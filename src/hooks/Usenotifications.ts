@@ -1,9 +1,3 @@
-// =============================================================================
-// ShiftSync — useNotifications
-// Subscribes to the Supabase notifications:{userId} broadcast channel.
-// Prepends incoming notifications to local state and increments unread count.
-// =============================================================================
-
 import { useEffect, useState, useCallback } from 'react'
 
 export type AppNotification = {

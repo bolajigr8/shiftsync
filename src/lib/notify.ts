@@ -1,11 +1,3 @@
-// =============================================================================
-// ShiftSync — Notification helpers
-//
-// createNotification always writes to DB first (guaranteed). The Supabase
-// realtime broadcast is best-effort and wrapped in a non-blocking catch so
-// that a websocket failure never prevents the notification from being stored.
-// =============================================================================
-
 import { getServerSupabase } from '@/lib/supabase'
 import { simulateEmail } from '@/lib/email'
 import type { NotificationType } from '@prisma/client'

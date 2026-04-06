@@ -1,9 +1,3 @@
-// =============================================================================
-// ShiftSync — useSwapRealtime
-// Subscribes to swaps:{userId} and calls onUpdate on every broadcast event.
-// Cleans up on unmount.
-// =============================================================================
-
 import { useEffect, useRef } from 'react'
 
 export function useSwapRealtime(

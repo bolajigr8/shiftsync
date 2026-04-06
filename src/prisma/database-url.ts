@@ -1,24 +1,3 @@
-// =============================================================================
-// Database URL resolution
-//
-// Resolves the correct connection string across deployment targets without
-// requiring env var renaming per platform:
-//
-//   Vercel Postgres  → injects POSTGRES_URL_NON_POOLING / POSTGRES_PRISMA_URL
-//   Supabase         → uses DIRECT_URL / DATABASE_URL
-//   Generic Postgres → DATABASE_URL
-//
-// The pooling vs. non-pooling distinction matters:
-//   - Migrations & introspection need a DIRECT (non-pooled) connection because
-//     pgBouncer (used by Supabase and Vercel Postgres poolers) does not support
-//     the advisory locks that Prisma migrate relies on.
-//   - Runtime queries use the pooled URL for connection efficiency in serverless.
-//
-// We keep two separate exported functions so callers can be explicit about
-// which they need, but in practice the adapter-based PrismaClient always uses
-// getDatabaseUrl() and migrations are handled by prisma.config.ts.
-// =============================================================================
-
 /** Return the first non-empty string from the argument list. */
 function firstDefined(
   ...values: Array<string | undefined>

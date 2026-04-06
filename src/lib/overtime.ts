@@ -1,7 +1,3 @@
-// =============================================================================
-// ShiftSync — Overtime and cost projection utilities
-// =============================================================================
-
 import { getWeekBoundsUTC } from '@/lib/timezone'
 import { db } from '@/prisma/db'
 import { differenceInMinutes } from 'date-fns'

@@ -1,18 +1,3 @@
-// =============================================================================
-// ShiftSync — Prisma client
-//
-// Uses the @prisma/adapter-pg driver adapter (Prisma v6+ recommended pattern).
-// Key benefits over the legacy built-in Rust engine:
-//
-//   1. You control the pg.Pool — size, SSL, timeouts, all explicit.
-//   2. Better pgBouncer / Supabase pooler compatibility.
-//   3. Forward-compatible with Prisma v7 which deprecates the internal engine.
-//
-// Instantiation is intentionally lazy (Proxy) so importing this module at the
-// top of many files does not open a DB connection until the first query is
-// actually executed — important in serverless where cold starts are expensive.
-// =============================================================================
-
 import { Pool } from 'pg'
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'

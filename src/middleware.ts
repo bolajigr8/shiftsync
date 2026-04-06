@@ -1,11 +1,3 @@
-// =============================================================================
-// ShiftSync — Route protection middleware (NextAuth v4 + withAuth)
-//
-// withAuth reads the JWT from the cookie — no DB call, Edge-compatible.
-// The inner function only runs when authorized() returns true (token exists).
-// Role mismatches are caught here and redirected to /login.
-// =============================================================================
-
 import { withAuth } from 'next-auth/middleware'
 import { NextResponse } from 'next/server'
 

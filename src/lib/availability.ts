@@ -1,10 +1,3 @@
-// =============================================================================
-// ShiftSync — Availability conflict detection
-//
-// Extracted from the availability API routes so it can be imported from
-// both the recurring and exceptions handlers without cross-route imports.
-// =============================================================================
-
 import { db } from '@/prisma/db'
 import { checkAvailability } from '@/lib/constraints'
 import { notifyLocationManagers } from '@/lib/notify'

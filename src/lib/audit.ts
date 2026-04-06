@@ -1,14 +1,3 @@
-// =============================================================================
-// ShiftSync — Audit log writer
-//
-// createAuditLog wraps every DB write in a try-catch so that a failed audit
-// entry NEVER bubbles up and breaks the calling scheduling operation.
-//
-// locationId is a required direct parameter (not in opts) because the schema
-// enforces a non-nullable FK to Location. Callers must always pass a valid
-// location ID.
-// =============================================================================
-
 import { db } from '@/prisma/db'
 import type { AuditAction, Prisma } from '@prisma/client'
 

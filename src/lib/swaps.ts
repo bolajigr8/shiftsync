@@ -1,7 +1,3 @@
-// =============================================================================
-// ShiftSync — Swap request lifecycle helpers
-// =============================================================================
-
 import { createNotification } from '@/lib/notify'
 import { db } from '@/prisma/db'
 import type { SafeUser } from '@/types/index'

@@ -1,14 +1,3 @@
-// =============================================================================
-// ShiftSync — Scheduling constraint engine
-//
-// Each of the eight functions returns Promise<ConstraintResult>:
-//   allowed: false + reason  → hard block — the action must be refused
-//   allowed: true  + warning → soft block — surface to manager, may proceed
-//   allowed: true            → clear
-//
-// runAllConstraints runs all eight in parallel.
-// =============================================================================
-
 import { fromZonedTime, toZonedTime } from 'date-fns-tz'
 import { startOfDay, differenceInMinutes } from 'date-fns'
 import { getWeekBoundsUTC } from '@/lib/timezone'

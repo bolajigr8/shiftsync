@@ -1,10 +1,3 @@
-// =============================================================================
-// ShiftSync — Timezone utility functions
-//
-// All functions use date-fns-tz v3 which introduces fromZonedTime/toZonedTime.
-// If you are on v2 rename: zonedTimeToUtc → fromZonedTime, utcToZonedTime → toZonedTime.
-// =============================================================================
-
 import { fromZonedTime, toZonedTime, format } from 'date-fns-tz'
 import { startOfDay } from 'date-fns'
 

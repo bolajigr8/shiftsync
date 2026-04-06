@@ -1,11 +1,3 @@
-// =============================================================================
-// ShiftSync — Email simulation layer
-//
-// No real email is ever sent. Every outbound email is written to the EmailLog
-// table for admin review at /admin/email-log. This keeps infrastructure simple
-// on the free Supabase tier while giving the admin full visibility.
-// =============================================================================
-
 import { db } from '@/prisma/db'
 import type { NotificationType } from '@prisma/client'
 

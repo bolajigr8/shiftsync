@@ -1,10 +1,3 @@
-// =============================================================================
-// ShiftSync — NextAuth v4 configuration
-//
-// Kept in src/lib/auth.ts (not inside the route file) so that authOptions can
-// be imported by getServerSession() in server layouts without circular deps.
-// =============================================================================
-
 import type { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'

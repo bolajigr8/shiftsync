@@ -1,9 +1,3 @@
-// =============================================================================
-// ShiftSync — useScheduleRealtime
-// Subscribes to schedule:{locationId} and calls onUpdate on every event.
-// Cleans up the channel subscription on unmount.
-// =============================================================================
-
 import { useEffect, useRef } from 'react'
 
 export function useScheduleRealtime(
